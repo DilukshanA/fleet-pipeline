@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fleet Pipeline &mdash; Live Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --surface: #131a2a;
+    --surface-2: #0e1422;
+    --border: #232c42;
+    --border-soft: #1a2135;
+    --text: #e8ecf6;
+    --muted: #8891a8;
+    --muted-2: #626b82;
+    --accent: #5b8cff;
+    --accent-dim: rgba(91,140,255,.14);
+    --good: #34d399;
+    --good-dim: rgba(52,211,153,.14);
+    --bad: #f87171;
+    --bad-dim: rgba(248,113,113,.14);
+    --warn: #fbbf24;
+    --warn-dim: rgba(251,191,36,.14);
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-dim); color: var(--text); }
+
+  a { color: var(--accent); }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 16px 24px;
+    background: rgba(11,15,26,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header .title-block { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .sub .dot { margin: 0 6px; color: var(--muted-2); }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .pill-good { background: var(--good-dim); color: var(--good); border-color: rgba(52,211,153,.3); }
+  .pill-bad { background: var(--bad-dim); color: var(--bad); border-color: rgba(248,113,113,.3); }
+  .pill-warn { background: var(--warn-dim); color: var(--warn); border-color: rgba(251,191,36,.3); }
+  .pill-neutral { background: var(--surface-2); color: var(--muted); border-color: var(--border); }
+  .pill-neutral::before { display: none; }
+
+  main {
+    padding: 20px 24px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .kpi {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px 14px 18px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--kpi-accent, var(--accent));
+  }
+  .kpi .val {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .kpi .val .unit { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .kpi .lbl { color: var(--muted); font-size: 11.5px; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .kpi .bar-track { margin-top: 10px; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .kpi .bar-fill { height: 100%; border-radius: 999px; background: var(--kpi-accent, var(--accent)); width: 0%; transition: width .4s ease; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .panel-head h2 {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin: 0;
+    font-weight: 700;
+  }
+  .panel-head .meta { font-size: 11.5px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+  .panel-body { max-height: 420px; overflow: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--surface);
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: .05em;
+    z-index: 1;
+  }
+  td { padding: 9px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(255,255,255,.02); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .zone-earn { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .zone-bar-track { width: 64px; height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; flex: none; }
+  .zone-bar-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+  .zone-earn .n { min-width: 58px; text-align: right; }
+
+  tr.unprofitable td.num-profit, tr.unprofitable td.num-margin { color: var(--bad); font-weight: 700; }
+  tr.profitable td.num-profit, tr.profitable td.num-margin { color: var(--good); }
+  tr.resolved { opacity: .4; }
+
+  .sev-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  .sev-pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .sev-critical { background: var(--bad-dim); color: var(--bad); }
+  .sev-warning { background: var(--warn-dim); color: var(--warn); }
+  .sev-info { background: var(--accent-dim); color: var(--accent); }
+
+  .msg-cell { color: var(--text); max-width: 420px; }
+  .veh-id { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .empty-state { padding: 32px 16px; text-align: center; color: var(--muted-2); font-size: 12.5px; }
+
+  footer {
+    padding: 8px 24px 28px;
+    max-width: 1400px;
+    margin: 0 auto;
+    color: var(--muted-2);
+    font-size: 11px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  footer code {
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 980px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 640px) {
+    header { padding: 12px 16px; }
+    main { padding: 16px 16px 32px; gap: 14px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .kpi { padding: 12px 14px; }
+    .kpi .val { font-size: 21px; }
+
+    /* Card-ized tables: thead hides, each row becomes a labeled card */
+    .panel-body { max-height: none; overflow: visible; }
+    table.responsive-cards, table.responsive-cards tbody, table.responsive-cards tr, table.responsive-cards td {
+      display: block; width: 100%;
+    }
+    table.responsive-cards thead { display: none; }
+    table.responsive-cards tbody tr {
+      border-bottom: 1px solid var(--border-soft);
+      padding: 10px 16px;
+    }
+    table.responsive-cards tbody tr:hover td { background: transparent; }
+    table.responsive-cards td {
+      border-bottom: none;
+      padding: 3px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: right;
+    }
+    table.responsive-cards td.num { text-align: right; }
+    table.responsive-cards td::before {
+      content: attr(data-label);
+      color: var(--muted);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-weight: 700;
+      text-align: left;
+      flex: none;
+    }
+    table.responsive-cards td.msg-cell { text-align: right; }
+    .zone-earn { justify-content: flex-end; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-block">
+    <h1>Fleet Pipeline</h1>
+    <div class="sub">Ride-hailing fleet operations<span class="dot">&middot;</span>refreshes every 3s<span class="dot">&middot;</span><span id="updated-at">&ndash;</span></div>
+  </div>
+  <span id="health-badge" class="pill pill-neutral">checking&hellip;</span>
+</header>
+
+<main>
+  <section class="kpi-row">
+    <div class="kpi" style="--kpi-accent: var(--good)">
+      <div class="val" id="c-active">&ndash;</div>
+      <div class="lbl">Active vehicles</div>
+    </div>
+    <div class="kpi" style="--kpi-accent: var(--warn)">
+      <div class="val" id="c-idle">&ndash;</div>
+      <div class="lbl">Idle vehicles</div>
+    </div>
+    <div class="kpi" style="--kpi-accent: var(--accent)">
+      <div class="val" id="c-ratio">&ndash;<span class="unit">%</span></div>
+      <div class="lbl">Idle ratio</div>
+      <div class="bar-track"><div class="bar-fill" id="c-ratio-bar"></div></div>
+    </div>
+    <div class="kpi">
+      <div class="val" id="c-trips">&ndash;</div>
+      <div class="lbl">Trips (last hour)</div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Earnings by zone</h2>
+        <span class="meta">latest window</span>
+      </div>
+      <div class="panel-body">
+        <table class="responsive-cards">
+          <thead><tr><th>Zone</th><th class="num">Trips</th><th class="num">Earnings</th><th class="num">Vehicles</th></tr></thead>
+          <tbody id="zone-rows"><tr><td colspan="4" class="empty-state">loading&hellip;</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Recent alerts</h2>
+        <span class="meta" id="alerts-meta"></span>
+      </div>
+      <div class="panel-body">
+        <table class="responsive-cards">
+          <thead><tr><th>Type</th><th>Severity</th><th>Message</th><th>When</th></tr></thead>
+          <tbody id="alert-rows"><tr><td colspan="4" class="empty-state">loading&hellip;</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Daily profitability report</h2>
+      <span class="meta" id="report-date">&ndash;</span>
+    </div>
+    <div class="panel-body">
+      <table class="responsive-cards">
+        <thead>
+          <tr>
+            <th>Vehicle</th><th class="num">Trips</th><th class="num">Earnings</th><th class="num">Fuel</th>
+            <th class="num">Maintenance</th><th class="num">Profit</th><th class="num">Margin</th><th>Service?</th>
+          </tr>
+        </thead>
+        <tbody id="profit-rows"><tr><td colspan="8" class="empty-state">loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  API:&nbsp;<code>/fleet/metrics</code><code>/alerts</code><code>/reports/profitability</code><code>/health</code><code>/metrics</code>&nbsp;(Prometheus format)
+</footer>
+
+<script>
+async function getJSON(url) {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    return await res.json();
+  } catch (e) { return null; }
+}
+
+function fmt(n, digits = 0) {
+  if (n === null || n === undefined) return "-";
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function refreshHealth() {
+  const res = await fetch("/health", { cache: "no-store" });
+  const body = await res.json();
+  const badge = document.getElementById("health-badge");
+  if (res.ok) {
+    badge.textContent = `Healthy · ${fmt(body.seconds_since_last_batch, 1)}s since last batch`;
+    badge.className = "pill pill-good";
+  } else {
+    badge.textContent = `Unhealthy — ${body.reason || "no data"}`;
+    badge.className = "pill pill-bad";
+  }
+}
+
+async function refreshMetrics() {
+  const data = await getJSON("/fleet/metrics");
+  if (!data) return;
+  const s = data.snapshot || {};
+  document.getElementById("c-active").textContent = fmt(s.active_vehicles);
+  document.getElementById("c-idle").textContent = fmt(s.idle_vehicles);
+  const ratioPct = s.idle_ratio !== undefined ? s.idle_ratio * 100 : null;
+  document.getElementById("c-ratio").innerHTML = (ratioPct !== null ? ratioPct.toFixed(1) : "-") + '<span class="unit">%</span>';
+  document.getElementById("c-ratio-bar").style.width = (ratioPct !== null ? Math.min(100, ratioPct) : 0) + "%";
+  document.getElementById("c-trips").textContent = fmt(data.trips_last_hour);
+
+  const zones = (data.zones || []).slice().sort((a, b) => b.earnings - a.earnings);
+  const maxEarn = Math.max(1, ...zones.map(z => z.earnings || 0));
+  const zoneRows = zones.map(z => `
+    <tr>
+      <td data-label="Zone">${esc(z.zone)}</td>
+      <td class="num" data-label="Trips">${fmt(z.trips_started)}</td>
+      <td class="num" data-label="Earnings">
+        <div class="zone-earn">
+          <div class="zone-bar-track"><div class="zone-bar-fill" style="width:${((z.earnings || 0) / maxEarn * 100).toFixed(1)}%"></div></div>
+          <span class="n">${fmt(z.earnings, 2)}</span>
+        </div>
+      </td>
+      <td class="num" data-label="Vehicles">${fmt(z.active_vehicles)}</td>
+    </tr>
+  `).join("");
+  document.getElementById("zone-rows").innerHTML = zoneRows || '<tr><td colspan="4" class="empty-state">No zone data yet</td></tr>';
+
+  document.getElementById("updated-at").textContent = "updated " + new Date().toLocaleTimeString();
+}
+
+async function refreshAlerts() {
+  const data = await getJSON("/alerts?limit=15");
+  if (!data) return;
+  const alerts = data.alerts || [];
+  document.getElementById("alerts-meta").textContent = alerts.length ? `${alerts.length} shown` : "";
+  const rows = alerts.map(a => `
+    <tr class="${a.resolved ? 'resolved' : ''}">
+      <td data-label="Type">${esc(a.alert_type)}</td>
+      <td data-label="Severity"><span class="sev-pill sev-${esc(a.severity)}">${esc(a.severity)}</span></td>
+      <td class="msg-cell" data-label="Message">${esc(a.message)}</td>
+      <td data-label="When">${new Date(a.real_time).toLocaleTimeString()}</td>
+    </tr>
+  `).join("");
+  document.getElementById("alert-rows").innerHTML = rows || '<tr><td colspan="4" class="empty-state">No alerts yet</td></tr>';
+}
+
+async function refreshProfitability() {
+  const data = await getJSON("/reports/profitability");
+  if (!data) return;
+  document.getElementById("report-date").textContent = data.date || "no completed day yet";
+  const rows = (data.vehicles || []).map(v => `
+    <tr class="${v.is_unprofitable ? 'unprofitable' : 'profitable'}">
+      <td data-label="Vehicle" class="veh-id">${esc(v.vehicle_id)}</td>
+      <td class="num" data-label="Trips">${fmt(v.trips_count)}</td>
+      <td class="num" data-label="Earnings">${fmt(v.earnings, 2)}</td>
+      <td class="num" data-label="Fuel">${fmt(v.fuel_cost, 2)}</td>
+      <td class="num" data-label="Maintenance">${fmt(v.maintenance_cost, 2)}</td>
+      <td class="num num-profit" data-label="Profit">${fmt(v.profit, 2)}</td>
+      <td class="num num-margin" data-label="Margin">${v.margin !== null ? (v.margin * 100).toFixed(1) + "%" : "-"}</td>
+      <td data-label="Service?">${v.needs_service ? '<span class="sev-pill sev-warning">Needed</span>' : '<span class="pill pill-neutral">OK</span>'}</td>
+    </tr>
+  `).join("");
+  document.getElementById("profit-rows").innerHTML = rows || '<tr><td colspan="8" class="empty-state">No report for this day yet</td></tr>';
+}
+
+function refreshAll() {
+  refreshHealth();
+  refreshMetrics();
+  refreshAlerts();
+  refreshProfitability();
+}
+
+refreshAll();
+setInterval(refreshAll, 3000);
+</script>
+</body>
+</html>
